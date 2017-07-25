@@ -7,8 +7,8 @@ enum MainState {
 
 @:publicFields
 class Main {
-    static inline var screen_width = 1500;
-    static inline var screen_height = 1000;
+    static inline var screen_width = Game.map_width * Game.tilesize;
+    static inline var screen_height = Game.map_height * Game.tilesize;
     static var state = MainState_Game;
     static var game: Game;
 

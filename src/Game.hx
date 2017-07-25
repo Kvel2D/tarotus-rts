@@ -17,189 +17,71 @@ enum GameState {
 
 enum CardType {
     CardType_None;
-    CardType_Bonus;
     CardType_Player;
     CardType_Enemy;
-}
-
-enum BonusType {
-    BonusType_None;
-    BonusType_Healing;
-    BonusType_Damage;
 }
 
 @:publicFields
 class Card {
     var type = CardType_None;
     var dude_type = DudeType_None;
-    var bonus_type = BonusType_None;
     var covered = false;
-    var visited = false;
-    var turn_age = 0;
-    var update_age = 0;
     var x = 0;
     var y = 0;
-    var level = 0;
-    var completed = true;
-    var my_dudes = new Array<Dude>();
-    var just_updated_timer = 0;
 
     function new() {}
 }
 
-typedef Chance = {
-    val: Int,
-    min: Float,
-    max: Float,
-}
-
-typedef Particle = {
-    x: Float,
-    y: Float,
-    color: Int,
-    width: Float,
-    width_final: Float,
-    t: Float,
-    t_max: Float,
-    dx: Float,
-    dy: Float,
-    ddy: Float
-}
-
 @:publicFields
 class Game {
-    static inline var DRAW_COORDINATES = false;
-    static inline var UPDATE_CARDS = true;
     static inline var DRAW_IMAGE_COVER = true;
     static inline var DRAW_TRANSPARENT_COVER = true;
-    static inline var DRAW_CARD_LEVEL = true;
-    static inline var ARROW_HACK = false;
-    var GOD_MODE = false;
 
     static inline var tilesize = 64;
-    static inline var cardmap_width = 5;
+    static inline var cardmap_width = 6;
     static inline var cardmap_height = 3;
     static inline var card_width = 3;
     static inline var card_height = 5;
     static inline var map_width = cardmap_width * card_width;
     static inline var map_height = cardmap_height * card_height;
-    static inline var inventory_slots = 5;
-    static inline var inventory_x = 1000;
-    static inline var inventory_y = 64;
-    static inline var inventory_slot_size = 64;
-    static inline var trash_x = inventory_x;
-    static inline var trash_y = inventory_y + inventory_slot_size * inventory_slots + 10;
-    static inline var shop_inventory_slots = 3;
-    static inline var shop_inventory_x = 200;
-    static inline var shop_inventory_y = 600;
-    static inline var shop_inventory_slot_size = 64;
 
-    var state = GameState_PlayerChoice;
-    var state_timer = 0; // reset to 0 by state at completion
     static inline var move_visual_timer_max = 7;
     static inline var weapon_visual_timer_max = 10;
     static inline var bow_visual_timer_max = 50;
     static inline var card_flip_timer_max = 30;
     static inline var turn_delay = 5;
-    var flipped_card: Card;
-    var message_text = '';
-    var message_timer = 0;
-    static inline var message_x = map_width * tilesize / 2;
-    static inline var message_y = (map_height - 1) * tilesize;
-    static var message_timer_max = 360;
-
-    var cards = new Vector<Vector<Card>>(cardmap_width);
-    var cards_covered = 0;
-    static inline var total_cards = cardmap_width * cardmap_height;
-    static inline var card_update_timer_max = 10; // turns
-    var card_update_timer = card_update_timer_max;
-    var card_level = 1; // level of generated cards(updated after every x cards are generaed)
-    static inline var card_level_increment_timer_min = 5;
-    static inline var card_level_increment_timer_max = 8;
-    var card_level_increment_timer = Random.int(card_level_increment_timer_min, card_level_increment_timer_max);
-    var card_type_history = new Array<CardType>();
-    static inline var too_old_age = 30;
-    static inline var max_money_amount = 10;
-
-    var player:Player;
-    var history = new Array<Array<String>>();
+    var state = GameState_PlayerChoice;
+    var state_timer = 0;
     static inline var choice_timer_max = 20;
     var choice_timer = choice_timer_max;
+
+    var cards = new Vector<Vector<Card>>(cardmap_width);
+    var flipped_card: Card;
+
     var no_action = false;
     var flipped_good_card = false;
     var flipped_bad_card = false;
-
     var win = false;
 
     var player_color = Col.ORANGE;
     var enemy_color = Col.DARKBLUE;
 
+    var turn_count = 0;
+
+
     function new() {
-
-        player = new Player();
-        player.x = 2;
-        player.y = 1;
-        player.real_x = player.x * tilesize;
-        player.real_y = player.y * tilesize;
-
-        // Set card positions/types
+        // Set up cards
         for (i in 0...cards.length) {
             cards[i] = new Vector<Card>(cardmap_height);
 
             for (j in 0...cards[i].length) {
                 cards[i][j] = new Card();
-                var card = cards[i][j];
-                card.x = i;
-                card.y = j;
-                card.covered = true;
+                cards[i][j].x = i;
+                cards[i][j].y = j;
             }
         }
 
-        var shuffled = new Array<Card>();
-        for (x in 0...cardmap_width) {
-            for (y in 0...cardmap_height) {
-                shuffled.push(cards[x][y]);
-            }
-        }
-        Random.shuffle(shuffled);
-
-        var dude_types = new Array<DudeType>();
-        for (i in 0...Math.floor(shuffled.length / 2)) {
-            if (Random.chance(15)) {
-                dude_types.push(get_chance(DudeType, dude_type_order, dude_type_chances));
-            } else if (Random.chance(30)) {
-                dude_types.push(DudeType_Ranged);
-            } else {
-                dude_types.push(DudeType_Melee);
-            }
-        }
-
-        // Set types, half is enemy, half is player, one unassigned
-        for (i in 0...Math.floor(shuffled.length / 2)) {
-            shuffled[i].type = CardType_Enemy;
-            shuffled[i].dude_type = dude_types[i];
-        }
-        for (i in Math.floor(shuffled.length / 2)...(shuffled.length - 1)) {
-            if (Random.chance(80)) {
-                shuffled[i].type = CardType_Player;
-                shuffled[i].dude_type = dude_types[i - Math.floor(shuffled.length / 2)];
-            } else {
-                shuffled[i].type = CardType_Bonus;
-            }
-        }
-
-        var unassigned = shuffled[shuffled.length - 1];
-        unassigned.type = CardType_None;
-        unassigned.covered = false;
-
-        // Generate cards
-        for (i in 0...cards.length) {
-            for (j in 0...cards[i].length) {
-                generate_card(cards[i][j]);
-            }
-        }
-
-        // Pre draw stuff
+        // Pre draw ground
         Gfx.create_image('ground', card_width * tilesize, card_height * tilesize);
         Gfx.draw_to_image('ground');
         Gfx.clear_screen(Col.BLACK);
@@ -216,11 +98,79 @@ class Game {
             Gfx.draw_line(0, y * card_height * tilesize, (cardmap_width - 1) * card_width * tilesize, y * card_height * tilesize, Col.NIGHTBLUE);
         }
         Gfx.line_thickness = 1;
+        Gfx.draw_to_screen();
 
-        Gfx.create_image('all_card_backs', map_width * tilesize, map_height * tilesize);
+
+        Gfx.create_image('background', Main.screen_width, Main.screen_height);
+        Gfx.create_image('card_back', card_width * tilesize, card_height * tilesize);
+        Gfx.create_image('card_front', card_width * tilesize, card_height * tilesize);
+        Gfx.create_image('all_card_backs', Main.screen_width, Main.screen_height);
+        Gfx.create_image('all_card_fronts', Main.screen_width, Main.screen_height);
+
+        restart();
+        state = GameState_PlayerChoice;
+    }
+
+    function restart() {
+        var dudes = new Array<Dude>();
+        for (dude in Entity.get(Dude)) {
+            dudes.push(dude);
+        }
+        for (dude in dudes) {
+            dude.delete();
+        }
+
+        for (i in 0...cards.length) {
+            for (j in 0...cards[i].length) {
+                cards[i][j].covered = true;
+            }
+        }
+
+        var shuffled = new Array<Card>();
+        for (x in 0...cardmap_width) {
+            for (y in 0...cardmap_height) {
+                shuffled.push(cards[x][y]);
+            }
+        }
+        Random.shuffle(shuffled);
+
+        var dude_types = new Array<DudeType>();
+        var k = 0;
+        for (i in 0...Math.floor(shuffled.length / 2)) {
+            k = Random.int(1, 100);
+            if (k <= 50) {
+                dude_types.push(DudeType_Melee);
+            } else if (k <= 50 + 30) {
+                dude_types.push(DudeType_Ranged);
+            } else {
+                dude_types.push(DudeType_Hero);
+            }
+        }
+
+        // Set types, half is enemy, half is player, one unassigned
+        for (i in 0...Math.floor(shuffled.length / 2)) {
+            shuffled[i].type = CardType_Enemy;
+            shuffled[i].dude_type = dude_types[i];
+        }
+        for (i in Math.floor(shuffled.length / 2)...(shuffled.length - 1)) {
+            shuffled[i].type = CardType_Player;
+            shuffled[i].dude_type = dude_types[i - Math.floor(shuffled.length / 2)];
+        }
+
+        var unassigned = shuffled[shuffled.length - 1];
+        unassigned.type = CardType_None;
+        unassigned.covered = false;
+
+        // Generate cards
+        for (i in 0...cards.length) {
+            for (j in 0...cards[i].length) {
+                generate_card(cards[i][j]);
+            }
+        }
+
+
+        // Draw card backs
         Gfx.draw_to_image('all_card_backs');
-        var font_size = Text.currentsize;
-        Text.change_size(40);
         for (x in 0...cardmap_width) {
             for (y in 0...cardmap_height) {
                 if (unassigned.x == x && unassigned.y == y) {
@@ -229,16 +179,15 @@ class Game {
                 draw_card_cover(cards[x][y]);
             }
         }
-        Text.change_size(font_size);
 
-
-        Gfx.create_image('background', Main.screen_height, Main.screen_height);
+        // Draw background
         Gfx.draw_to_image('background');
         Gfx.draw_image(0, 0, 'all_card_backs');
         Gfx.draw_image(unassigned.x * card_width * tilesize, 
             unassigned.y * card_height * tilesize, 'ground');
+        Gfx.draw_to_screen();
 
-        Gfx.create_image('all_card_fronts', map_width * tilesize, map_height * tilesize);
+        // Draw card fronts(the part with dudes)
         Gfx.draw_to_image('all_card_fronts');
         for (x in 0...cardmap_width) {
             for (y in 0...cardmap_height) {
@@ -250,78 +199,13 @@ class Game {
         }
         Gfx.draw_to_screen();
 
-        // Canvas for flipping card visual
-        Gfx.create_image('card_back', card_width * tilesize, card_height * tilesize);
-        Gfx.create_image('card_front', card_width * tilesize, card_height * tilesize);
-    }
-
-    var chance_history = new ObjectMap<Dynamic, Array<Int>>();
-    function get_chance(enum_type: Dynamic, enums: Array<Dynamic>, chances: Array<Chance>): Dynamic {
-        var chances_incremented = new Vector<Int>(chances.length);
-        for (i in 0...chances.length) {
-            chances_incremented[i] = chances[i].val;
-        }
-
-        var counts = new Vector<Int>(chances.length);
-        for (i in 0...chances.length) {
-            counts[i] = 0;
-        }
-        if (!chance_history.exists(enum_type)) {
-            chance_history.set(enum_type, new Array<Int>());
-        }
-
-        if (chance_history.get(enum_type).length > 7) {
-            chance_history.get(enum_type).pop();
-        }
-        var history = chance_history.get(enum_type);
-        for (i in 0...history.length) {
-            counts[history[i]]++;
-        }
-
-        for (i in 0...chances.length) {
-            // If there are too many cards of type, halve the chances
-            if (counts[i] / history.length > chances[i].max && chances[i].max != 0) {
-                chances_incremented[i] = Math.floor(chances_incremented[i] / 2);
-            }
-            // If there are too little cards of type, double the chances
-            if (counts[i] / history.length < chances[i].min && chances[i].min != 0) {
-                chances_incremented[i] = Math.ceil(chances_incremented[i] * 2);
-            }
-        }
-
-        var chance_sum = 0;
-        for (i in 0...chances.length) {
-            chance_sum += chances_incremented[i];
-            chances_incremented[i] = chance_sum; 
-        }
-
-        var k = Random.int(1, chance_sum);
-        var selected = 0;
-        for (i in 0...chances.length) {
-            if (k <= chances_incremented[i]) {
-                chance_history.get(enum_type).insert(0, enums[i]);
-                return enums[i];
-            }
-        }
-
-        return enums[0];
-    }
-
-    var dude_type_order = [
-    DudeType_Melee,
-    DudeType_Ranged,
-    DudeType_Hero,
-    ];
-    var dude_type_chances: Array<Chance> = [
-    {val: 1, min: 1, max: 5},
-    {val: 1, min: 1, max: 4},
-    {val: 1, min: 1, max: 3},
-    ];
-
-    // start_index is used to skip EnumType_None
-    function random_enum(enum_type:Dynamic, start_index:Int = 1):Dynamic {
-        var k = Random.int(start_index, Type.allEnums(enum_type).length - 1);
-        return Type.allEnums(enum_type)[k];
+        flipped_good_card = false;
+        flipped_bad_card = false;
+        state_timer = 0;
+        choice_timer = choice_timer_max;
+        no_action = false;
+        win = false;
+        turn_count = 0;
     }
 
     function generate_card(card:Card) {
@@ -407,81 +291,12 @@ class Game {
                     dude.faction = DudeFaction_Enemy;
                 }
             }
-        } else if (card.type == CardType_Bonus) {
-            if (Random.chance(50)) {
-                card.bonus_type = BonusType_Healing;
-            } else {
-                card.bonus_type = BonusType_Damage;
-            }
         }
-    }
-
-    function serialize(entity:Dynamic) {
-        var fields = Type.getInstanceFields(Type.getClass(entity));
-        var fields_string = '';
-        for (f in fields) {
-            var field = Std.string(Reflect.field(entity, f));
-            if (field.indexOf('function') != -1) {
-                continue;
-            }
-            var enum_type = Type.resolveEnum(field.split('_')[0]);
-            if (enum_type != null) {
-                // for enums record it's index
-                var enums = Type.allEnums(enum_type);
-                for (i in 0...enums.length) {
-                    if (Std.string(enums[i]) == field) {
-                        // enumname_enumindex
-                        fields_string += f + '=' + field.split('_')[0] + '_' + i + '|';
-                        break;
-                    }
-                }
-            } else {
-                fields_string += f + '=' + field + '|';
-            }
-        }
-        return fields_string;
-    }
-
-    function unserialize(entity:Dynamic, fields_string:String) {
-        var fields = fields_string.split('|');
-        fields.splice(fields.length - 1, 1);
-        for (f in fields) {
-            var pair = f.split('=');
-            if ((~/^\d+$/).match(pair[0])) {
-                // Number
-                Reflect.setField(entity, pair[0], Std.parseFloat(pair[1]));
-            } else if (pair[1] == 'false') {
-                // Bool
-                Reflect.setField(entity, pair[0], false);
-            } else if (pair[1] == 'true') {
-                // Bool
-                Reflect.setField(entity, pair[0], true);
-            } else if (Type.resolveEnum(pair[1].split('_')[0]) != null) {
-                // Enum
-                var enum_type = Type.resolveEnum(pair[1].split('_')[0]);
-                var enum_index = Std.parseInt(pair[1].split('_')[1]);
-                var enum_value = Type.allEnums(enum_type)[enum_index];
-                Reflect.setField(entity, pair[0], enum_value);
-            } else if (pair[1].indexOf('[') != -1) {
-                // Array member serialization is not supported
-                Reflect.setField(entity, pair[0], new Array());
-            } else {
-                // String
-                Reflect.setField(entity, pair[0], pair[1]);
-            }
-        }
-    }
-
-    function make_message(text: String) {
-        message_text = text;
-        message_timer = message_timer_max;
     }
 
     // each bool tells what to filter out
-    function get_free_map(filter_covered_cards = true, filter_dudes = true, filter_items = true, 
-        filter_player = true): Vector<Vector<Bool>> 
+    function get_free_map(filter_covered_cards = true, filter_dudes = true): Vector<Vector<Bool>> 
     {
-        // Mark items/dudes/player/covered cards as false, don't ignore player
         var free_map = Data.bool_2dvector(map_width, map_height, true);
         if (filter_covered_cards) {
             for (x in 0...cardmap_width) {
@@ -624,25 +439,10 @@ class Game {
             switch (card.type) {
                 case CardType_Player: card_color = Col.GREEN;
                 case CardType_Enemy: card_color = Col.RED;
-                case CardType_Bonus: card_color = Col.GREEN;
                 default:
             }
             Gfx.fill_box(x * card_width * tilesize, y * card_height * tilesize,
                 card_width * tilesize, card_height * tilesize, card_color, 0.5);
-        }
-        if (DRAW_CARD_LEVEL) {
-            Text.display(x * card_width * tilesize, y * card_height * tilesize, '${card.level}', Col.WHITE);
-            Text.display((x + 1) * card_width * tilesize - tilesize / 2, (y + 1) * card_height * tilesize - tilesize, 
-                '${card.level}', Col.WHITE);
-        }
-        if (card.type == CardType_Bonus) {
-            var draw_x = x * card_width * tilesize + 1.5 * tilesize;
-            var draw_y = y * card_height * tilesize + 2 * tilesize;
-            switch (card.bonus_type) {
-                case BonusType_Healing: Text.display(draw_x, draw_y, 'H', Col.WHITE);
-                case BonusType_Damage: Text.display(draw_x, draw_y, 'D', Col.WHITE);
-                default: Text.display(draw_x, draw_y, 'DEFAULT', Col.WHITE);
-            }
         }
 
         if (card.type == CardType_Player || card.type == CardType_Enemy) {
@@ -688,53 +488,12 @@ class Game {
     function render() {
         Gfx.draw_image(0, 0, 'background');
 
-        if (DRAW_COORDINATES) {
-            for (dx in -2...3) {
-                for (dy in -2...3) {
-                    Text.display((player.x + dx) * tilesize + 5, (player.y + dy) * tilesize + 10, '${(player.x + dx)},${(player.y + dy)}');
-                }
-            }
-        }
-
         for (dude in Entity.get(Dude)) {
             if (dude.active) {
                 draw_dude(dude);
             }
         }
         Gfx.rotation(0);
-
-        Text.display(inventory_x, 0, '${Gfx.render_fps()}');
-        Text.display(inventory_x, 30, '${state}');
-
-        if (message_timer > 0) {
-            message_timer--;
-
-            var size = Text.currentsize;
-            var new_size: Float;
-            if (message_timer > message_timer_max * 0.95) {
-                new_size = Math.lerp(size * 1, size * 1.25, (message_timer_max - message_timer) / (message_timer_max * 0.05));
-            } else {
-                new_size = size * 1.25;
-            }
-            Text.change_size(new_size);
-
-            var x = message_x - Text.width(message_text) / 2;
-            var y = message_y - Text.height() / 2;
-
-            // Reset message timer on mouse hover
-            if (Math.point_box_intersect(Mouse.x, Mouse.y, x, y, Text.width(message_text), Text.height())) {
-                message_timer = Std.int(message_timer_max / 2);
-            }
-
-
-            if (message_timer > message_timer_max * 0.3) {
-                Text.display(x, y, message_text);
-            } else {
-                var c = Std.int(message_timer / message_timer_max / 0.3 * 255);
-                Text.display(x, y, message_text, Col.rgb(c, c, c));
-            }
-            Text.change_size(size);
-        }
     }
 
     function out_of_bounds(x:Int, y:Int):Bool {
@@ -795,11 +554,14 @@ class Game {
             }
         }
 
-        var font_size = Text.currentsize;
-        Text.change_size(40);
-        Text.display(inventory_x, 800, 
-            'Turn over one red card\nand one green to continue', Col.WHITE);
-        Text.change_size(font_size);
+        if (turn_count < 2) {
+            var font_size = Text.currentsize;
+            Text.change_size(40);
+            Text.display(Main.screen_width / 2- Text.width('Turn over one red card and') / 2, 
+                Main.screen_height / 2 - Text.height() / 2, 
+                'Turn over one red card and \none green card to continue', Col.WHITE);
+            Text.change_size(font_size);
+        }
     }
 
     function poke_visual_pos(x, y, dx, dy, dst: Float, timer, timer_max): Vector2 {
@@ -998,13 +760,6 @@ class Game {
 
         render();
 
-        var entity_states = new Array<String>();
-        entity_states.push(serialize(player));
-        for (dude in Entity.get(Dude)) {
-            entity_states.push(serialize(dude));
-        }
-        history.push(entity_states);
-
         choice_timer--;
         if (choice_timer <= 0 || no_action) {
             var no_cards_left = true;
@@ -1050,66 +805,47 @@ class Game {
             state_timer = 0;
 
             flipped_card.covered = false;
-            if (flipped_card.type == CardType_Bonus) {
-                switch (flipped_card.bonus_type) {
-                    case BonusType_Healing: {
-                        for (dude in Entity.get(Dude)) {
-                            if (dude.active 
-                                && dude.faction == DudeFaction_Player 
-                                && !dude.dead) 
-                            {
-                                dude.hp = dude.hp_max * 2;
-                            }
-                        }
-                    }
-                    case BonusType_Damage: {
-                        for (dude in Entity.get(Dude)) {
-                            if (dude.active 
-                                && dude.faction == DudeFaction_Player 
-                                && !dude.dead) 
-                            {
-                                dude.dmg *= 5;
-                            }
-                        }
-                    }
-                    default:
-                }
-            }
             
             if (flipped_good_card && flipped_bad_card) {
                 state = GameState_Turn;
+                turn_count++;
                 flipped_good_card = false;
                 flipped_bad_card = false;
             } else {
                 state = GameState_PlayerChoice;
             }
         }
+
+        if (turn_count < 2) {
+            var font_size = Text.currentsize;
+            Text.change_size(40);
+            Text.display(Main.screen_width / 2- Text.width('Turn over one red card and') / 2, 
+                Main.screen_height / 2 - Text.height() / 2,
+                'Turn over one red card and \none green card to continue', Col.WHITE);
+            Text.change_size(font_size);
+        }
     }
 
     function update_game_over() {
         render();
 
+        var font_size = Text.currentsize;
+        Text.change_size(80);
         if (win) {
-            Text.display(0, 0, 'YOU WIN');
+            Text.display(Main.screen_width / 2- Text.width('GREEN WINS') / 2, 
+                Main.screen_height / 2 - Text.height() / 2, 'GREEN WINS');
         } else {
-            Text.display(0, 0, 'YOU LOSE');
+            Text.display(Main.screen_width / 2- Text.width('RED WINS') / 2, 
+                Main.screen_height / 2 - Text.height() / 2, 'RED WINS');
         }
+        Text.change_size(40);
+        Text.display(Main.screen_width / 2- Text.width('PRESS R TO RESTART') / 2, 
+            Main.screen_height / 2 - Text.height() / 2 + Text.height() * 1.1, 
+            'PRESS R TO RESTART');
+        Text.change_size(font_size);
     }
 
     function update() {
-        if (Input.just_pressed(Key.Z) && history.length > 0 && state == GameState_PlayerChoice) {
-            var previous_state = history.pop();
-            unserialize(player, previous_state[0]);
-            player.dx = 0;
-            player.dy = 0;
-            Entity.get(Dude).splice(0, Entity.get(Dude).length);
-            for (i in 1...previous_state.length) {
-                var dude = new Dude();
-                unserialize(dude, previous_state[i]);
-                dude.dx = 0;
-                dude.dy = 0;
-            }
-        }
 
         switch (state) {
             case GameState_PlayerChoice: update_player_choice();
@@ -1118,6 +854,11 @@ class Game {
             case GameState_TurnResult: update_turn_result();
             case GameState_CardFlip: update_card_flip();
             case GameState_GameOver: update_game_over();
+        }
+
+        if (Input.just_pressed(Key.R)) {
+            restart();
+            state = GameState_PlayerChoice;
         }
     }
 }

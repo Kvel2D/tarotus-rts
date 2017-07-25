@@ -1,28 +1,6 @@
 import haxe.ds.ObjectMap;
 import haxegon.*;
 
-enum DoorColor {
-	DoorColor_White;
-	DoorColor_Black;
-}
-
-enum ItemType {
-	ItemType_None;
-	ItemType_Weapon;
-	ItemType_Armor;
-	ItemType_Consumable;
-	ItemType_Bomb;
-	ItemType_Money;
-}
-
-enum WeaponType {
-	WeaponType_None;
-	WeaponType_Sword;
-	WeaponType_Spear;
-	WeaponType_Bow;
-	WeaponType_Laser;
-}
-
 enum DudeType {
 	DudeType_None;
 	DudeType_Melee;
@@ -74,26 +52,6 @@ class Entity {
 		}
 		all.remove(this);
 	}
-}
-
-class Player extends Entity {
-	var x = 0;
-	var y = 0;
-	var real_x = 0;
-	var real_y = 0;
-	var attacked = false;
-	var angle = 0.0;
-	var moved = false;
-	var dx = 0;
-	var dy = 0;
-
-	var hp = 10;
-	var hp_max = 10;
-	var default_hp_max = 10;
-	var armor = 0;
-	var incoming_damage = 0;
-
-	var weapon = WeaponType_None;
 }
 
 class Dude extends Entity {
