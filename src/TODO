@@ -1,9 +1,9 @@
-make hero units spawn in smaller amounts and be powerful
-make craft flip pre draw, draw less
 
-recolor to red/green, make bonus cards green too
+parametrize things like unit distribution, amount of bonuses, difficulty
+maybe make a separate mode where you can turn over cards whenever, still have to turn over one enemy ony player card each time though
+balance
 
 
-game over condition
+DONE:
 
 

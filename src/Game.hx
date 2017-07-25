@@ -12,6 +12,7 @@ enum GameState {
     GameState_Visuals;
     GameState_TurnResult;
     GameState_CardFlip;
+    GameState_GameOver;
 }
 
 enum CardType {
@@ -128,17 +129,12 @@ class Game {
     var flipped_good_card = false;
     var flipped_bad_card = false;
 
-    var game_over = false;
+    var win = false;
 
     var player_color = Col.ORANGE;
     var enemy_color = Col.DARKBLUE;
 
     function new() {
-
-        // Canvas for card flip animation
-        Gfx.create_image('card_front', card_width * tilesize, card_height * tilesize);
-        Gfx.create_image('card_back', card_width * tilesize, card_height * tilesize);
-        Gfx.create_image('map_canvas', map_width * tilesize, map_height * tilesize);
 
         player = new Player();
         player.x = 2;
@@ -203,23 +199,60 @@ class Game {
             }
         }
 
-        // Pre draw background
-        Gfx.create_image('background', Main.screen_height, Main.screen_height);
-        Gfx.draw_to_image('background');
-        for (x in 0...map_width) {
-            for (y in 0...map_height) {
+        // Pre draw stuff
+        Gfx.create_image('ground', card_width * tilesize, card_height * tilesize);
+        Gfx.draw_to_image('ground');
+        Gfx.clear_screen(Col.BLACK);
+        for (x in 0...card_width) {
+            for (y in 0...card_height) {
                 Gfx.draw_tile(x * tilesize, y * tilesize, Tiles.Space);
             }
         }
         Gfx.line_thickness = 7;
-        for (x in 0...cardmap_width) {
+        for (x in 0...2) {
             Gfx.draw_line(x * card_width * tilesize, 0, x * card_width * tilesize, (cardmap_height - 1) * card_height * tilesize, Col.NIGHTBLUE);
         }
-        for (y in 0...cardmap_height) {
+        for (y in 0...2) {
             Gfx.draw_line(0, y * card_height * tilesize, (cardmap_width - 1) * card_width * tilesize, y * card_height * tilesize, Col.NIGHTBLUE);
         }
         Gfx.line_thickness = 1;
+
+        Gfx.create_image('all_card_backs', map_width * tilesize, map_height * tilesize);
+        Gfx.draw_to_image('all_card_backs');
+        var font_size = Text.currentsize;
+        Text.change_size(40);
+        for (x in 0...cardmap_width) {
+            for (y in 0...cardmap_height) {
+                if (unassigned.x == x && unassigned.y == y) {
+                    continue;
+                }
+                draw_card_cover(cards[x][y]);
+            }
+        }
+        Text.change_size(font_size);
+
+
+        Gfx.create_image('background', Main.screen_height, Main.screen_height);
+        Gfx.draw_to_image('background');
+        Gfx.draw_image(0, 0, 'all_card_backs');
+        Gfx.draw_image(unassigned.x * card_width * tilesize, 
+            unassigned.y * card_height * tilesize, 'ground');
+
+        Gfx.create_image('all_card_fronts', map_width * tilesize, map_height * tilesize);
+        Gfx.draw_to_image('all_card_fronts');
+        for (x in 0...cardmap_width) {
+            for (y in 0...cardmap_height) {
+                Gfx.draw_image(x * card_width * tilesize, y * card_height * tilesize, 'ground');
+            }
+        }
+        for (dude in Entity.get(Dude)) {
+            draw_dude(dude);
+        }
         Gfx.draw_to_screen();
+
+        // Canvas for flipping card visual
+        Gfx.create_image('card_back', card_width * tilesize, card_height * tilesize);
+        Gfx.create_image('card_front', card_width * tilesize, card_height * tilesize);
     }
 
     var chance_history = new ObjectMap<Dynamic, Array<Int>>();
@@ -331,11 +364,27 @@ class Game {
         if (card.type == CardType_Player || card.type == CardType_Enemy) {
 
             var number_of_dudes = 0;
-            if (card.dude_type == DudeType_Hero) {
-                number_of_dudes = 2;
-            } else {
-                number_of_dudes = Random.int(3, 4);
+            var hp = 0;
+            var dmg = 0;
+            switch (card.dude_type) {
+                case DudeType_Melee: {
+                    number_of_dudes = Random.int(4, 5);
+                    hp = 5;
+                    dmg = 1;
+                }
+                case DudeType_Ranged: {
+                    number_of_dudes = Random.int(3, 4);
+                    hp = 3;
+                    dmg = 1;
+                }
+                case DudeType_Hero: {
+                    number_of_dudes = 1;
+                    hp = 20;
+                    dmg = 3;
+                }
+                default:
             }
+
             while (number_of_dudes > 0) {
                 number_of_dudes--;
 
@@ -347,9 +396,9 @@ class Game {
                 dude.y = free_cell.y;
                 dude.real_x = dude.x * tilesize;
                 dude.real_y = dude.y * tilesize;
-                dude.hp_max = Random.int(3, 5);
+                dude.hp_max = hp;
                 dude.hp = dude.hp_max;
-                dude.dmg = 1;
+                dude.dmg = dmg;
                 dude.type = card.dude_type;
 
                 if (card.type == CardType_Player) {
@@ -564,7 +613,9 @@ class Game {
         return new Array<IntVector2>();
     }
 
-    function draw_card_cover(x: Int, y: Int, card: Card) {
+    function draw_card_cover(card: Card) {
+        var x = card.x;
+        var y = card.y;
         if (DRAW_IMAGE_COVER) {
             Gfx.draw_image(x * card_width * tilesize, y * card_height * tilesize, 'card');
         }
@@ -573,7 +624,7 @@ class Game {
             switch (card.type) {
                 case CardType_Player: card_color = Col.GREEN;
                 case CardType_Enemy: card_color = Col.RED;
-                case CardType_Bonus: card_color = Col.BLUE;
+                case CardType_Bonus: card_color = Col.GREEN;
                 default:
             }
             Gfx.fill_box(x * card_width * tilesize, y * card_height * tilesize,
@@ -606,8 +657,36 @@ class Game {
         }
     }
 
+    function draw_dude(dude: Dude) {
+        var dude_tile = Tiles.Temp;
+        switch (dude.faction) {
+            case DudeFaction_Player: {
+                switch (dude.type) {
+                    case DudeType_Melee: dude_tile = Tiles.MeleePlayer;
+                    case DudeType_Ranged: dude_tile = Tiles.RangedPlayer;
+                    case DudeType_Hero: dude_tile = Tiles.HeroPlayer;
+                    default:
+                }
+            }
+            case DudeFaction_Enemy: {
+                switch (dude.type) {
+                    case DudeType_Melee: dude_tile = Tiles.MeleeEnemy;
+                    case DudeType_Ranged: dude_tile = Tiles.RangedEnemy;
+                    case DudeType_Hero: dude_tile = Tiles.HeroEnemy;
+                    default:
+                }
+            }
+            default:
+        }
+        Gfx.rotation(dude.angle);
+        Gfx.draw_tile(dude.real_x, dude.real_y, dude_tile);
+        if (!dude.dead) {
+            Text.display(dude.real_x, dude.real_y, '${dude.hp}/${dude.hp_max}', Col.WHITE);
+        }
+    }
+
     function render() {
-        Gfx.draw_image(0, 0, "background");
+        Gfx.draw_image(0, 0, 'background');
 
         if (DRAW_COORDINATES) {
             for (dx in -2...3) {
@@ -618,55 +697,14 @@ class Game {
         }
 
         for (dude in Entity.get(Dude)) {
-            var dude_tile = Tiles.Temp;
-            switch (dude.faction) {
-                case DudeFaction_Player: {
-                    switch (dude.type) {
-                        case DudeType_Melee: dude_tile = Tiles.MeleePlayer;
-                        case DudeType_Ranged: dude_tile = Tiles.RangedPlayer;
-                        case DudeType_Hero: dude_tile = Tiles.HeroPlayer;
-                        default:
-                    }
-                }
-                case DudeFaction_Enemy: {
-                    switch (dude.type) {
-                        case DudeType_Melee: dude_tile = Tiles.MeleeEnemy;
-                        case DudeType_Ranged: dude_tile = Tiles.RangedEnemy;
-                        case DudeType_Hero: dude_tile = Tiles.HeroEnemy;
-                        default:
-                    }
-                }
-                default:
-            }
-            Gfx.rotation(dude.angle);
-            Gfx.draw_tile(dude.real_x, dude.real_y, dude_tile);
-            if (!dude.dead) {
-                Text.display(dude.real_x, dude.real_y, '${dude.hp}/${dude.hp_max}', Col.WHITE);
+            if (dude.active) {
+                draw_dude(dude);
             }
         }
         Gfx.rotation(0);
 
-
-        var font_size = Text.currentsize;
-        Text.change_size(40);
-        var card: Card;
-        for (x in 0...cardmap_width) {
-            for (y in 0...cardmap_height) {
-                card = cards[x][y];
-
-                if (card.covered) {
-                    draw_card_cover(x, y, card);
-                }
-            }
-        }
-        Text.change_size(font_size);
-
-
         Text.display(inventory_x, 0, '${Gfx.render_fps()}');
         Text.display(inventory_x, 30, '${state}');
-        if (game_over) {
-            Text.display(inventory_x, 750, 'Game over', Col.WHITE);
-        }
 
         if (message_timer > 0) {
             message_timer--;
@@ -709,6 +747,8 @@ class Game {
 
     function update_player_choice() {
 
+        render();
+        
         // Turn over a card
         if (Mouse.left_click() || Mouse.right_click()) {
             var x = Std.int(Mouse.x / tilesize);
@@ -733,18 +773,15 @@ class Game {
 
                         // Draw flipped card sides for animation
                         Gfx.draw_to_image('card_back');
-                        Gfx.clear_screen(Col.BLACK);
-                        draw_card_cover(0, 0, flipped_card);
-
-                        flipped_card.covered = false;
-                        Gfx.draw_to_image('map_canvas');
-                        Gfx.clear_screen(Col.BLACK);
-                        render();
-                        flipped_card.covered = true;
+                        Gfx.draw_image(-flipped_card.x * card_width * tilesize, -flipped_card.y * card_height * tilesize, 'all_card_backs');
                         Gfx.draw_to_image('card_front');
-                        Gfx.clear_screen(Col.BLACK);
-                        Gfx.draw_image(-flipped_card.x * card_width * tilesize, -flipped_card.y * card_height * tilesize, 'map_canvas');
+                        Gfx.draw_image(-flipped_card.x * card_width * tilesize, -flipped_card.y * card_height * tilesize, 'all_card_fronts');
+                        Gfx.draw_to_screen();
 
+                        // Update background
+                        Gfx.draw_to_image('background');
+                        Gfx.draw_image(flipped_card.x * card_width * tilesize,
+                            flipped_card.y * card_height * tilesize, 'ground');
                         Gfx.draw_to_screen();
 
                         for (dude in Entity.get(Dude)) {
@@ -758,12 +795,10 @@ class Game {
             }
         }
 
-        render();
-
         var font_size = Text.currentsize;
         Text.change_size(40);
         Text.display(inventory_x, 800, 
-            'Turn over one red card\nand one green or \nblue card to continue', Col.WHITE);
+            'Turn over one red card\nand one green to continue', Col.WHITE);
         Text.change_size(font_size);
     }
 
@@ -972,7 +1007,25 @@ class Game {
 
         choice_timer--;
         if (choice_timer <= 0 || no_action) {
-            state = GameState_PlayerChoice;
+            var no_cards_left = true;
+            for (x in 0...cardmap_width) {
+                for (y in 0...cardmap_height) {
+                    if (cards[x][y].covered) {
+                        no_cards_left = false;
+                    }
+                }
+            }
+
+            if (no_cards_left) {
+                for (dude in Entity.get(Dude)) {
+                    if (dude.active && !dude.dead && dude.faction == DudeFaction_Player) {
+                        win = true;
+                    }
+                }
+                state = GameState_GameOver;
+            } else {
+                state = GameState_PlayerChoice;
+            }
         } else {
             state = GameState_Turn;
         }
@@ -1005,10 +1058,7 @@ class Game {
                                 && dude.faction == DudeFaction_Player 
                                 && !dude.dead) 
                             {
-                                dude.hp++;
-                                if (dude.hp > dude.hp_max) {
-                                    dude.hp = dude.hp_max;
-                                }
+                                dude.hp = dude.hp_max * 2;
                             }
                         }
                     }
@@ -1018,7 +1068,7 @@ class Game {
                                 && dude.faction == DudeFaction_Player 
                                 && !dude.dead) 
                             {
-                                dude.dmg++;
+                                dude.dmg *= 5;
                             }
                         }
                     }
@@ -1033,6 +1083,16 @@ class Game {
             } else {
                 state = GameState_PlayerChoice;
             }
+        }
+    }
+
+    function update_game_over() {
+        render();
+
+        if (win) {
+            Text.display(0, 0, 'YOU WIN');
+        } else {
+            Text.display(0, 0, 'YOU LOSE');
         }
     }
 
@@ -1057,6 +1117,7 @@ class Game {
             case GameState_Visuals: update_visuals();
             case GameState_TurnResult: update_turn_result();
             case GameState_CardFlip: update_card_flip();
+            case GameState_GameOver: update_game_over();
         }
     }
 }
