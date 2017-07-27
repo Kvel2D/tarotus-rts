@@ -11,21 +11,23 @@ class GUI {
 
 	static var button_off_color = Col.GRAY;
 	static var button_on_color = Col.PINK;
-	static var button_text_color = Col.WHITE;
+	static var button_text_off_color = Col.WHITE;
+	static var button_text_on_color = Col.WHITE;
 	static var slider_background_color = Col.GRAY; 
 	static var slider_handle_color = Col.PINK;
 	static var slider_text_color = Col.WHITE;
 
 
-	static function set_pallete(passive: Int, active: Int, text: Int) {
-		button_off_color = passive;
-		slider_background_color = passive;
+	static function set_pallete(off: Int, on: Int, text_off: Int, text_on: Int) {
+		button_off_color = off;
+		slider_background_color = off;
 		
-		button_on_color = active;
-		slider_handle_color = active;
+		button_on_color = on;
+		slider_handle_color = on;
 
-		button_text_color = text;
-		slider_text_color = text;
+		button_text_off_color = text_off;
+		button_text_on_color = text_on;
+		slider_text_color = text_off;
 	}
 
 	static function image_button(x: Float, y: Float, image: String, button_function: Void->Void) {
@@ -61,10 +63,11 @@ class GUI {
 			if (Mouse.left_click()) {
 				button_function();
 			}
+			Text.display(button_x, button_y, text, button_text_on_color);
 		} else {
 			Gfx.fill_box(button_x, button_y, button_width, button_height, button_off_color);
+			Text.display(button_x, button_y, text, button_text_off_color);
 		}
-		Text.display(button_x, button_y, text, button_text_color);
 	}
 
 	static function auto_slider(text: String, set_function: Float->Void, current: Float, min: Float, max: Float, 

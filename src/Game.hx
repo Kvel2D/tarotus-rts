@@ -7,6 +7,7 @@ using haxegon.MathExtensions;
 using Lambda;
 
 enum GameState {
+    GameState_Menu;
     GameState_PlayerChoice;
     GameState_Turn;
     GameState_Visuals;
@@ -19,6 +20,12 @@ enum CardType {
     CardType_None;
     CardType_Player;
     CardType_Enemy;
+}
+
+enum Difficulty {
+    Difficulty_Easy;
+    Difficulty_Medium;
+    Difficulty_Hard;
 }
 
 @:publicFields
@@ -50,7 +57,7 @@ class Game {
     static inline var bow_visual_timer_max = 50;
     static inline var card_flip_timer_max = 30;
     static inline var turn_delay = 5;
-    var state = GameState_PlayerChoice;
+    var state = GameState_Menu;
     var state_timer = 0;
     static inline var choice_timer_max = 20;
     var choice_timer = choice_timer_max;
@@ -67,9 +74,12 @@ class Game {
     var enemy_color = Col.DARKBLUE;
 
     var turn_count = 0;
-
+    var green_difficulty = Difficulty_Medium;
+    var red_difficulty = Difficulty_Medium;
 
     function new() {
+        GUI.set_pallete(Col.BLACK, Col.BLACK, Col.GRAY, Col.WHITE);
+
         // Set up cards
         for (i in 0...cards.length) {
             cards[i] = new Vector<Card>(cardmap_height);
@@ -108,7 +118,6 @@ class Game {
         Gfx.create_image('all_card_fronts', Main.screen_width, Main.screen_height);
 
         restart();
-        state = GameState_PlayerChoice;
     }
 
     function restart() {
@@ -152,14 +161,10 @@ class Game {
             shuffled[i].type = CardType_Enemy;
             shuffled[i].dude_type = dude_types[i];
         }
-        for (i in Math.floor(shuffled.length / 2)...(shuffled.length - 1)) {
+        for (i in Math.floor(shuffled.length / 2)...shuffled.length) {
             shuffled[i].type = CardType_Player;
             shuffled[i].dude_type = dude_types[i - Math.floor(shuffled.length / 2)];
         }
-
-        var unassigned = shuffled[shuffled.length - 1];
-        unassigned.type = CardType_None;
-        unassigned.covered = false;
 
         // Generate cards
         for (i in 0...cards.length) {
@@ -173,9 +178,6 @@ class Game {
         Gfx.draw_to_image('all_card_backs');
         for (x in 0...cardmap_width) {
             for (y in 0...cardmap_height) {
-                if (unassigned.x == x && unassigned.y == y) {
-                    continue;
-                }
                 draw_card_cover(cards[x][y]);
             }
         }
@@ -183,8 +185,6 @@ class Game {
         // Draw background
         Gfx.draw_to_image('background');
         Gfx.draw_image(0, 0, 'all_card_backs');
-        Gfx.draw_image(unassigned.x * card_width * tilesize, 
-            unassigned.y * card_height * tilesize, 'ground');
         Gfx.draw_to_screen();
 
         // Draw card fronts(the part with dudes)
@@ -205,7 +205,6 @@ class Game {
         choice_timer = choice_timer_max;
         no_action = false;
         win = false;
-        turn_count = 0;
     }
 
     function generate_card(card:Card) {
@@ -247,17 +246,34 @@ class Game {
 
         if (card.type == CardType_Player || card.type == CardType_Enemy) {
 
+            var difficulty = Difficulty_Easy;
+            if (card.type == CardType_Player) {
+                difficulty = green_difficulty;
+            } else if (card.type == CardType_Enemy) {
+                difficulty = red_difficulty;
+            }
+
             var number_of_dudes = 0;
             var hp = 0;
             var dmg = 0;
             switch (card.dude_type) {
                 case DudeType_Melee: {
-                    number_of_dudes = Random.int(4, 5);
+                    switch (difficulty) {
+                        case Difficulty_Easy: number_of_dudes = Random.int(50, 60);
+                        case Difficulty_Medium: number_of_dudes = Random.int(40, 50);
+                        case Difficulty_Hard: number_of_dudes = Random.int(30, 40);
+                    }
+                    number_of_dudes = Math.round(number_of_dudes / 10);
                     hp = 5;
                     dmg = 1;
                 }
                 case DudeType_Ranged: {
-                    number_of_dudes = Random.int(3, 4);
+                    switch (difficulty) {
+                        case Difficulty_Easy: number_of_dudes = Random.int(40, 50);
+                        case Difficulty_Medium: number_of_dudes = Random.int(30, 40);
+                        case Difficulty_Hard: number_of_dudes = Random.int(20, 30);
+                    }
+                    number_of_dudes = Math.round(number_of_dudes / 10);
                     hp = 3;
                     dmg = 1;
                 }
@@ -504,6 +520,63 @@ class Game {
         return {x: Std.int(x / card_width), y: Std.int(y / card_height)};
     }
 
+    function update_menu() {
+
+        Gfx.clear_screen(Col.BLACK);
+
+        var font_size = Text.currentsize;
+        Text.change_size(40);
+        GUI.text_button(Main.screen_width / 2 - Text.width('START') / 2, 
+            Main.screen_height * 0.2, 'START', function() {
+                restart();
+                state = GameState_PlayerChoice;
+            });
+
+        function difficulty_selector(y: Float, difficulty, set: Difficulty->Void) {
+            var difficulty_text = '';
+            switch (difficulty) {
+                case Difficulty_Easy: difficulty_text = 'EASY';
+                case Difficulty_Medium: difficulty_text = 'MEDIUM';
+                case Difficulty_Hard: difficulty_text = 'HARD';
+            }
+            Text.display(Main.screen_width / 2 - Text.width(difficulty_text) / 2, 
+                y, difficulty_text, Col.GRAY);
+
+            GUI.text_button(Main.screen_width / 2 + Text.width('MEDIUM') / 2 + 10, 
+                y, '>', function() {
+                    switch (difficulty) {
+                        case Difficulty_Easy: set(Difficulty_Medium);
+                        case Difficulty_Medium: set(Difficulty_Hard);
+                        case Difficulty_Hard:
+                    }
+                });
+            GUI.text_button(Main.screen_width / 2 - Text.width('MEDIUM') / 2 - Text.width('<') - 10, 
+                y, '<', function() {
+                    switch (difficulty) {
+                        case Difficulty_Easy:
+                        case Difficulty_Medium: set(Difficulty_Easy);
+                        case Difficulty_Hard: set(Difficulty_Medium);
+                    }
+                });
+        }
+
+        Text.display(Main.screen_width / 2 - Text.width('GREEN DIFFICULTY:') * 1.3, 
+            Main.screen_height * 0.2 + Text.height() * 1.5, 'GREEN DIFFICULTY:', Col.GRAY);
+        difficulty_selector(Main.screen_height * 0.2 + Text.height() * 1.5, green_difficulty,
+            function(x: Difficulty) {
+                green_difficulty = x;
+            });
+        Text.display(Main.screen_width / 2 - Text.width('GREEN DIFFICULTY:') * 1.3, 
+            Main.screen_height * 0.2 + Text.height() * 3, 'RED DIFFICULTY:', Col.GRAY);
+        difficulty_selector(Main.screen_height * 0.2 + Text.height() * 3, red_difficulty,
+            function(x: Difficulty) {
+                red_difficulty = x;
+            });
+
+        
+        Text.change_size(font_size);
+    }
+
     function update_player_choice() {
 
         render();
@@ -557,7 +630,7 @@ class Game {
         if (turn_count < 2) {
             var font_size = Text.currentsize;
             Text.change_size(40);
-            Text.display(Main.screen_width / 2- Text.width('Turn over one red card and') / 2, 
+            Text.display(Main.screen_width / 2 - Text.width('Turn over one red card and') / 2, 
                 Main.screen_height / 2 - Text.height() / 2, 
                 'Turn over one red card and \none green card to continue', Col.WHITE);
             Text.change_size(font_size);
@@ -567,13 +640,19 @@ class Game {
     function poke_visual_pos(x, y, dx, dy, dst: Float, timer, timer_max): Vector2 {
         // Starts at (x, y), goes dst away from it, comes back
         var progress = 0.5 - Math.abs(timer / timer_max - 0.5);
-        return {x: (x + 0.5) * tilesize + dx * progress * dst + dx * tilesize / 2, y: (y + 0.5) * tilesize + dy * progress * dst + dy * tilesize / 2};
+        return {
+            x: (x + 0.5) * tilesize + dx * progress * dst + dx * tilesize / 2, 
+            y: (y + 0.5) * tilesize + dy * progress * dst + dy * tilesize / 2
+        };
     }
 
-    function straight_visual_pos(x, y, dx, dy, dst, timer, timer_max): Vector2 {
+    function straight_visual_pos(x, y, dx, dy, timer, timer_max): Vector2 {
         // Goes in a straight line from (x, y) 
         var progress = timer / timer_max;
-        return {x: (x + 0.5) * tilesize + dx * progress * dst, y: (y + 0.5) * tilesize + dy * progress * dst};
+        return {
+            x: (x + dx * progress + 0.5) * tilesize , 
+            y: (y + dy * progress + 0.5) * tilesize
+        };
     }
 
     function update_turn() {
@@ -607,50 +686,34 @@ class Game {
 
         for (dude in Entity.get(Dude)) {
             if (dude.active && !dude.dead) {
-                if (dude.type == DudeType_Melee || dude.type == DudeType_Hero) {
-                    var closest_dude = closest_dude(dude);
-                    if (closest_dude != null) {
-                        var dst = Math.dst2(closest_dude.x, closest_dude.y, dude.x, dude.y);
-                        if (dst <= 2) {
-                                // Attack if enemy is close
-                                dude.attacked = true;
-                                closest_dude.incoming_damage += dude.dmg;
-                                dude.dx = Math.sign(closest_dude.x - dude.x);
-                                dude.dy = Math.sign(closest_dude.y - dude.y);
-                            } else {
-                                // Move to closest dude
-                                var path = a_star(dude.x, dude.y, closest_dude.x, closest_dude.y);
-                                if (path.length > 1) {
-                                    dude.moved = true;
-                                    dude.dx = path[path.length - 2].x - dude.x;
-                                    dude.dy = path[path.length - 2].y - dude.y;
-                                }
-                            }
-                        }
-                    } else if (dude.type == DudeType_Ranged) {
-                        var closest_dude = closest_dude(dude);
-                        
-                        if (closest_dude != null) {
-                            var dst = Math.dst2(closest_dude.x, closest_dude.y, dude.x, dude.y);
-                            if (dst <= 9) {
-                                // Attack if enemy is close
-                                dude.attacked = true;
-                                closest_dude.incoming_damage += dude.dmg;
-                                dude.dx = Math.sign(closest_dude.x - dude.x);
-                                dude.dy = Math.sign(closest_dude.y - dude.y);
-                            } else {
-                                // Move to closest dude
-                                var path = a_star(dude.x, dude.y, closest_dude.x, closest_dude.y);
-                                if (path.length > 1) {
-                                    dude.moved = true;
-                                    dude.dx = path[path.length - 2].x - dude.x;
-                                    dude.dy = path[path.length - 2].y - dude.y;
-                                }
-                            }
+                var range = 0;
+                if (dude.type == DudeType_Ranged) {
+                    range = 16;
+                } else {
+                    range = 2;
+                }
+
+                var closest_dude = closest_dude(dude);
+                if (closest_dude != null) {
+                    var dst = Math.dst2(closest_dude.x, closest_dude.y, dude.x, dude.y);
+                    if (dst <= range) {
+                        // Attack if enemy is close
+                        dude.attacked = true;
+                        closest_dude.incoming_damage += dude.dmg;
+                        dude.dx = closest_dude.x - dude.x;
+                        dude.dy = closest_dude.y - dude.y;
+                    } else {
+                        // Move to closest dude
+                        var path = a_star(dude.x, dude.y, closest_dude.x, closest_dude.y);
+                        if (path.length > 1) {
+                            dude.moved = true;
+                            dude.dx = path[path.length - 2].x - dude.x;
+                            dude.dy = path[path.length - 2].y - dude.y;
                         }
                     }
                 }
             }
+        }
 
         // Apply damage
         for (dude in Entity.get(Dude)) {
@@ -700,23 +763,21 @@ class Game {
                 } else if (dude.faction == DudeFaction_Enemy) {
                     attack_color = enemy_color;
                 }
-                if (state_timer < weapon_visual_timer_max) {
-                    var visual_pos = poke_visual_pos(dude.x, dude.y, dude.dx, dude.dy,
-                        50, state_timer, weapon_visual_timer_max);
-                    Gfx.fill_circle(visual_pos.x, visual_pos.y, 10, attack_color);
-                    all_visuals_complete = false;
-                }
-                // Draw attack visual
-                switch (dude.type) {
-                    case DudeType_Melee: {
-                        if (state_timer < weapon_visual_timer_max) {
-                            var visual_pos = poke_visual_pos(dude.x, dude.y, dude.dx, dude.dy,
-                                50, state_timer, weapon_visual_timer_max);
-                            Gfx.fill_circle(visual_pos.x, visual_pos.y, 10, attack_color);
-                            all_visuals_complete = false;
-                        }
+
+                if (dude.type == DudeType_Ranged) {
+                    if (state_timer < weapon_visual_timer_max) {
+                        var visual_pos = straight_visual_pos(dude.x, dude.y, dude.dx, dude.dy,
+                            state_timer, weapon_visual_timer_max);
+                        Gfx.fill_circle(visual_pos.x, visual_pos.y, 10, attack_color);
+                        all_visuals_complete = false;
                     }
-                    default:
+                } else {
+                    if (state_timer < weapon_visual_timer_max) {
+                        var visual_pos = poke_visual_pos(dude.x, dude.y, Math.sign(dude.dx), Math.sign(dude.dy),
+                            50, state_timer, weapon_visual_timer_max);
+                        Gfx.fill_circle(visual_pos.x, visual_pos.y, 10, attack_color);
+                        all_visuals_complete = false;
+                    }
                 }
             }
         }
@@ -819,7 +880,7 @@ class Game {
         if (turn_count < 2) {
             var font_size = Text.currentsize;
             Text.change_size(40);
-            Text.display(Main.screen_width / 2- Text.width('Turn over one red card and') / 2, 
+            Text.display(Main.screen_width / 2 - Text.width('Turn over one red card and') / 2, 
                 Main.screen_height / 2 - Text.height() / 2,
                 'Turn over one red card and \none green card to continue', Col.WHITE);
             Text.change_size(font_size);
@@ -831,23 +892,27 @@ class Game {
 
         var font_size = Text.currentsize;
         Text.change_size(80);
+        Gfx.fill_box(Main.screen_width / 2 - Text.width('GREEN WINS') / 2, 
+            Main.screen_height / 2 - Text.height() / 2,
+            Text.width('GREEN WINS'), Text.height() * 2.0, Col.BLACK);
         if (win) {
-            Text.display(Main.screen_width / 2- Text.width('GREEN WINS') / 2, 
+            Text.display(Main.screen_width / 2 - Text.width('GREEN WINS') / 2, 
                 Main.screen_height / 2 - Text.height() / 2, 'GREEN WINS');
         } else {
-            Text.display(Main.screen_width / 2- Text.width('RED WINS') / 2, 
+            Text.display(Main.screen_width / 2 - Text.width('RED WINS') / 2, 
                 Main.screen_height / 2 - Text.height() / 2, 'RED WINS');
         }
         Text.change_size(40);
-        Text.display(Main.screen_width / 2- Text.width('PRESS R TO RESTART') / 2, 
-            Main.screen_height / 2 - Text.height() / 2 + Text.height() * 1.1, 
-            'PRESS R TO RESTART');
+        Text.display(Main.screen_width / 2 - Text.width('PRESS R TO RESTART') / 2, 
+            Main.screen_height / 2 - Text.height() / 2 + Text.height() * 1.2, 
+            'PRESS R TO RESTART\nESC FOR MENU');
         Text.change_size(font_size);
     }
 
     function update() {
 
         switch (state) {
+            case GameState_Menu: update_menu();
             case GameState_PlayerChoice: update_player_choice();
             case GameState_Turn: update_turn();
             case GameState_Visuals: update_visuals();
@@ -859,6 +924,9 @@ class Game {
         if (Input.just_pressed(Key.R)) {
             restart();
             state = GameState_PlayerChoice;
+        } else if (Input.just_pressed(Key.ESCAPE)) {
+            restart();
+            state = GameState_Menu;
         }
     }
 }
